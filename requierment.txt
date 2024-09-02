@@ -1,0 +1,5 @@
+dash==2.11.1
+xarray==2023.7.0
+matplotlib==3.7.1
+numpy==1.25.0
+zarr==2.15.0
