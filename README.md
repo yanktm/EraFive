@@ -1,0 +1,1 @@
+This is the local application. You just have to clone the repository and run app.py. Be careful: by default, the file name that will be iterated over is fake_data. You need to modify it at the beginning of callbacks.py.
