@@ -1,0 +1,91 @@
+{
+    "metadata": {
+        ".zattrs": {},
+        ".zgroup": {
+            "zarr_format": 2
+        },
+        "land_sea_mask/.zarray": {
+            "chunks": [
+                240,
+                121
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                240,
+                121
+            ],
+            "zarr_format": 2
+        },
+        "land_sea_mask/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "longitude",
+                "latitude"
+            ],
+            "long_name": "Land-sea mask",
+            "short_name": "lsm",
+            "standard_name": "land_binary_mask",
+            "units": "(0 - 1)"
+        },
+        "latitude/.zarray": {
+            "chunks": [
+                121
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f8",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                121
+            ],
+            "zarr_format": 2
+        },
+        "latitude/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "latitude"
+            ]
+        },
+        "longitude/.zarray": {
+            "chunks": [
+                240
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f8",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                240
+            ],
+            "zarr_format": 2
+        },
+        "longitude/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "longitude"
+            ]
+        }
+    },
+    "zarr_consolidated_format": 1
+}

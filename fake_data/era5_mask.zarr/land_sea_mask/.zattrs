@@ -1,0 +1,10 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "longitude",
+        "latitude"
+    ],
+    "long_name": "Land-sea mask",
+    "short_name": "lsm",
+    "standard_name": "land_binary_mask",
+    "units": "(0 - 1)"
+}
