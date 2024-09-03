@@ -109,36 +109,14 @@ def get_list_indexes_of_time(dataset, start_time, end_time):
         return np.array([end_index])
     return np.array([])
 
-# def get_time_period(file):
-#     dataset_path = f'{path_repertory}/{file}'
-#     if not os.path.exists(dataset_path):
-#         raise FileNotFoundError(f"No such file or directory: '{dataset_path}'")
-#     ds = xr.open_zarr(dataset_path)
-#     start_time = str(ds.time.values[0])
-#     end_time = str(ds.time.values[-1])
-#     return start_time, end_time
-
-
-
 def get_time_period(file):
     dataset_path = f'{path_repertory}/{file}'
     if not os.path.exists(dataset_path):
         raise FileNotFoundError(f"No such file or directory: '{dataset_path}'")
     ds = xr.open_zarr(dataset_path)
-    start_time = ds.time.values[0]
-    end_time = ds.time.values[-1]
-    
-    start_year = int(str(start_time)[:4])
-    start_month = int(str(start_time)[5:7])
-    start_day = int(str(start_time)[8:10])
-    start_hour = int(str(start_time)[11:13])
-    
-    end_year = int(str(end_time)[:4])
-    end_month = int(str(end_time)[5:7])
-    end_day = int(str(end_time)[8:10])
-    end_hour = int(str(end_time)[11:13])
-    
-    return start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour
+    start_time = str(ds.time.values[0])
+    end_time = str(ds.time.values[-1])
+    return start_time, end_time
 
 
 def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, ry=None, level=None, forecast=None, mask=None):
@@ -341,9 +319,6 @@ def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time, lat, lo
 
 
 
-def fill_default_time_inputs():
-    return 2008, 1, 1, 0, 2008, 1, 2, 12
-
 
 def register_callbacks(app):
     # Callback pour mettre à jour les fichiers dans les dropdowns
@@ -360,30 +335,6 @@ def register_callbacks(app):
         return ref_files, pred_files
     
 
-    @app.callback(
-        [Output('start-year-input', 'value'),
-         Output('start-month-input', 'value'),
-         Output('start-day-input', 'value'),
-         Output('start-hour-input', 'value'),
-         Output('end-year-input', 'value'),
-         Output('end-month-input', 'value'),
-         Output('end-day-input', 'value'),
-         Output('end-hour-input', 'value')],
-        [Input('file-dropdown1', 'value'),  # Ou 'file-dropdown2', selon l'endroit où vous sélectionnez le dataset
-         Input('file-dropdown2', 'value')]
-    )
-    def fill_time_inputs(selected_file1, selected_file2):
-        selected_file = selected_file1 or selected_file2
-        if selected_file is None:
-            raise PreventUpdate
-    
-        try:
-            start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour = get_time_period(selected_file)
-            return start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour
-        except FileNotFoundError:
-            raise PreventUpdate
-
-    # Callback pour mettre à jour les variables et autres inputs basés sur le fichier sélectionné pour le graphique 1
     @app.callback(
         [Output('variable-dropdown1', 'options'),
          Output('forecast-number-container1', 'style'),
@@ -407,7 +358,7 @@ def register_callbacks(app):
         except FileNotFoundError as e:
             return [], {'display': 'none'}, None, str(e)
 
-    # Callback pour mettre à jour les variables et autres inputs basés sur le fichier sélectionné pour le graphique 2
+
     @app.callback(
         [Output('variable-dropdown2', 'options'),
          Output('forecast-number-container2', 'style'),
@@ -430,6 +381,7 @@ def register_callbacks(app):
             return variables, forecast_style, forecast_length, time_period_text
         except FileNotFoundError as e:
             return [], {'display': 'none'}, None, str(e)
+    
 
     # Callback pour mettre à jour le dropdown des niveaux pour le graphique 1
     @app.callback(
