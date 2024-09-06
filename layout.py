@@ -65,7 +65,7 @@ layout = html.Div([
             html.Button('Previous', id='prev-button1', n_clicks=0, style={'width': '33%', 'padding': '15px', 'fontSize': '18px'}),
             html.Button('Next', id='next-button1', n_clicks=0, style={'width': '33%', 'padding': '15px', 'fontSize': '18px'}),
             html.Button('Play', id='play-button', n_clicks=0, style={'width': '33%', 'padding': '15px', 'fontSize': '18px'}),  # Nouveau bouton Play
-            dcc.Interval(id='interval', interval=200, n_intervals=0, disabled=True),  # Intervalle pour la lecture automatique
+            dcc.Interval(id='interval', interval=1000, n_intervals=0, disabled=True),  # Intervalle pour la lecture automatique
 
             # Boutons pour gérer les métriques
             html.H2("Metrics", style={'textAlign': 'center', 'padding': '10px'}),
