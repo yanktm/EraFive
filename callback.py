@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
 
-path_repertory = "fake_data"
+path_repertory = "data"
 
-mask = xr.open_dataset("fake_data/era5_mask.zarr", engine='zarr')
+mask = xr.open_dataset("data/era5_mask.zarr", engine='zarr')
 
 metrics_list = ["Metrics On Forecast And Levels"]
 
@@ -143,10 +143,10 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
         # Cas 1: Si x et y sont None, on affiche le graphique sans rien
         if x is None and y is None:
             if data.ndim == 2:
-                plt.imshow(np.rot90(data), cmap='coolwarm')
+                plt.imshow(np.rot90(data), cmap='jet')
             elif data.ndim > 2:
                 data_2d = data.isel(**{dim: 0 for dim in data.dims if dim not in ['latitude', 'longitude', 'lat', 'lon']})
-                plt.imshow(np.rot90(data_2d), cmap='coolwarm')
+                plt.imshow(np.rot90(data_2d), cmap='jet')
             else:
                 raise ValueError("Data must be at least 2D for plotting")
             plt.grid(True)
@@ -154,7 +154,7 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
         # Cas 2: Si x et y sont présents, mais pas rx et ry, afficher le graphique avec scatter
         elif x is not None and y is not None and (rx is None or ry is None):
             data_rotated = np.rot90(data)
-            plt.imshow(data_rotated, cmap='coolwarm')
+            plt.imshow(data_rotated, cmap='jet')
             plt.scatter(x, y, color='black')  # Placer un point à la position (x, y)
             plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')  # Afficher les coordonnées au-dessus du point
             plt.grid(True)
@@ -170,7 +170,7 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
             
             # Extraire la région zoomée
             zoomed_region = data_rotated[y_min:y_max, x_min:x_max]
-            plt.imshow(zoomed_region, cmap='coolwarm', extent=[x_min, x_max, y_min, y_max])
+            plt.imshow(zoomed_region, cmap='jet', extent=[x_min, x_max, y_min, y_max])
             plt.scatter(x, y, color='black')  # Placer un point à la position (x, y)
             plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')  # Afficher les coordonnées au-dessus du point
             plt.grid(True)
