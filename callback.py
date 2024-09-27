@@ -77,10 +77,11 @@ def check_dimension(file, dim):
 def concatene_time(year, month, day, hour):
     if year is None or month is None or day is None or hour is None:
         return None
-    month = f"0{month}" if len(str(month)) == 1 else str(month)
-    day = f"0{day}" if len(str(day)) == 1 else str(day)
-    hour = f"0{hour}" if len(str(hour)) == 1 else str(hour)
+    month = f"{int(month):02d}"
+    day = f"{int(day):02d}"
+    hour = f"{int(hour):02d}"
     return np.datetime64(f"{year}-{month}-{day}T{hour}:00:00.000000000")
+
 
 def get_start_and_end_time(start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour):
     start_time = concatene_time(start_year, start_month, start_day, start_hour)
@@ -97,6 +98,37 @@ def get_index_of_time(dataset, time):
         return None
     index = np.where(dataset.time.values == time)
     return index[0][0] if len(index[0]) > 0 else None
+
+
+
+def get_start_end_time(dataset: xr.Dataset):
+    """Extrait le temps de début et de fin du jeu de données."""
+    return dataset.time[0].values, dataset.time[-1].values
+
+
+def get_year_start_end_time(dataset: xr.Dataset):
+    """Extrait les années de début et de fin du jeu de données."""
+    return dataset.time[0].dt.year.values, dataset.time[-1].dt.year.values
+
+def all_year_between(dataset: xr.Dataset):
+    """Renvoie toutes les années présentes dans le jeu de données."""
+    start_year, end_year = get_year_start_end_time(dataset)
+    return list(range(start_year, end_year + 1))
+
+
+def know_step_hour_for_the_first_day(dataset: xr.Dataset):
+    """Détermine le pas horaire pour le premier jour."""
+    if len(dataset.time) < 2:
+        return 1  # Par défaut, retourner un pas de 1 heure si le dataset est trop petit
+    return int((dataset.time[1] - dataset.time[0]).values / np.timedelta64(1, 'h'))
+
+
+
+def all_the_hours_of_the_first_day(dataset: xr.Dataset):
+    """Renvoie toutes les heures disponibles pour le premier jour."""
+    step_hour = know_step_hour_for_the_first_day(dataset)
+    return list(range(0, 24, step_hour))
+
 
 def get_list_indexes_of_time(dataset, start_time, end_time):
     start_index = get_index_of_time(dataset, start_time)
@@ -118,14 +150,13 @@ def get_time_period(file):
     end_time = str(ds.time.values[-1])
     return start_time, end_time
 
-
-def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, ry=None, level=None, forecast=None, mask=None):
+def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, ry=None, level=None, forecast=None, mask=None, dataset_name=None):
     plt.figure(figsize=(8, 7))
     try:
         lat_dim = len(dataset.latitude)
         lon_dim = len(dataset.longitude)
 
-        # Normaliser les coordonnées x et y pour les ramener dans les bornes valides
+        # Normalize x and y coordinates
         if x is not None:
             x = x % lon_dim
         if y is not None:
@@ -140,7 +171,7 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
         else:
             data = dataset[variable].isel(time=time_index)
 
-        # Cas 1: Si x et y sont None, on affiche le graphique sans rien
+        # Case 1: No x and y, display the full image
         if x is None and y is None:
             if data.ndim == 2:
                 plt.imshow(np.rot90(data), cmap='jet')
@@ -151,43 +182,52 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
                 raise ValueError("Data must be at least 2D for plotting")
             plt.grid(True)
 
-        # Cas 2: Si x et y sont présents, mais pas rx et ry, afficher le graphique avec scatter
+        # Case 2: x and y present, display with scatter
         elif x is not None and y is not None and (rx is None or ry is None):
             data_rotated = np.rot90(data)
             plt.imshow(data_rotated, cmap='jet')
-            plt.scatter(x, y, color='black')  # Placer un point à la position (x, y)
-            plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')  # Afficher les coordonnées au-dessus du point
+            plt.scatter(x, y, color='black')
+            plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')
             plt.grid(True)
 
-        # Cas 3: Si x, y, rx, et ry sont présents, afficher le zoom avec scatter
+        # Case 3: Zoomed in with rx and ry
         elif x is not None and y is not None and rx is not None and ry is not None:
             data_rotated = np.rot90(data)
-            # Calcul des limites pour le zoom
             x_min = max(0, x - rx)
             x_max = min(data_rotated.shape[1], x + rx)
             y_min = max(0, y - ry)
             y_max = min(data_rotated.shape[0], y + ry)
-            
-            # Extraire la région zoomée
             zoomed_region = data_rotated[y_min:y_max, x_min:x_max]
             plt.imshow(zoomed_region, cmap='jet', extent=[x_min, x_max, y_min, y_max])
-            plt.scatter(x, y, color='black')  # Placer un point à la position (x, y)
-            plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')  # Afficher les coordonnées au-dessus du point
+            plt.scatter(x, y, color='black')
+            plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')
             plt.grid(True)
-        
+
         if mask is not None:
             mask_data = mask["land_sea_mask"].data
             mask_rotated = np.rot90(mask_data)
-            if x is not None and y is not None and rx is not None and ry is not None:  # Si on effectue un zoom
+            if x is not None and y is not None and rx is not None and ry is not None:
                 mask_zoomed = mask_rotated[y_min:y_max, x_min:x_max]
                 plt.imshow(mask_zoomed, cmap='binary', alpha=0.5, extent=[x_min, x_max, y_min, y_max])
-            else:  # Si on affiche l'image complète
+            else:
                 plt.imshow(mask_rotated, cmap='binary', alpha=0.5)
             plt.grid(True)
 
-        plt.title(f"{variable} at time {time_index}")
-        
-        # Sauvegarder l'image en mémoire
+        # Get the time value
+        time_value = str(dataset.time.values[time_index])
+
+        # Construct the title with more information
+        title_parts = [
+            f"Dataset: {dataset_name}" if dataset_name else "",
+            f"Variable: {variable}",
+            f"Time: {time_value}",
+            f"Level: {level}" if level is not None else "",
+            f"Forecast: {forecast}" if forecast is not None else ""
+        ]
+        title = " | ".join(filter(None, title_parts))
+        plt.title(title)
+
+        # Save the image in memory
         buf = BytesIO()
         plt.savefig(buf, format="png")
         buf.seek(0)
@@ -200,12 +240,13 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
     except IndexError as e:
         raise ValueError(f"Indexing error: {e}")
 
-def list_images_plot(dataset, variable, start_time, end_time, level=None, forecast=None, mask=None, x=None, y=None, rx=None, ry=None):
+def list_images_plot(dataset, variable, start_time, end_time, level=None, forecast=None, mask=None, x=None, y=None, rx=None, ry=None, dataset_name=None):
     time_indexes = get_list_indexes_of_time(dataset, start_time, end_time)
     images = []
     for time_index in time_indexes:
-        images.append(plot_and_save_image(dataset, variable, time_index, x, y, rx, ry, level, forecast, mask))
+        images.append(plot_and_save_image(dataset, variable, time_index, x, y, rx, ry, level, forecast, mask, dataset_name))
     return images
+
 
 
 def check_conditions_for_plot_forecast_statistics(data):
@@ -221,14 +262,13 @@ def check_conditions_for_plot_forecast_statistics(data):
     return True
 
 
-def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time, lat, lon, rx, ry, num_forecasts):
-    def valeur(dataset, time, level, lat_slice, lon_slice, forecast=None):
-        """Extraire les valeurs moyennées sur une région spécifiée."""
-        # Utiliser modulo pour s'assurer que les slices sont dans les bornes valides
+def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time_index, lat, lon, rx, ry, num_forecasts, dataset_name=None, ground_truth_name=None):
+    def valeur(dataset, time_index, level, lat_slice, lon_slice, forecast=None):
+        """Extract mean values over a specified region."""
         lat_slice = [s % lat_dim for s in lat_slice]
         lon_slice = [s % lon_dim for s in lon_slice]
-        
-        region = dataset.isel(time=time, level=level).sel(
+
+        region = dataset.isel(time=time_index, level=level).sel(
             latitude=slice(min(lat_slice), max(lat_slice)),
             longitude=slice(min(lon_slice), max(lon_slice))
         )
@@ -238,15 +278,15 @@ def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time, lat, lo
 
     list_level = forecast_data.level.values
 
-    # Récupérer les dimensions de latitude et longitude
+    # Get dimensions
     lat_dim = len(forecast_data.latitude)
     lon_dim = len(forecast_data.longitude)
 
-    # Normaliser les coordonnées lat et lon pour s'assurer qu'elles sont dans les bornes valides
+    # Normalize coordinates
     lat = lat % lat_dim
     lon = lon % lon_dim
 
-    # Définir les tranches pour latitude et longitude en utilisant modulo pour s'assurer qu'ils sont dans les limites
+    # Define slices
     lat_slice = [(lat - ry) % lat_dim, (lat + ry) % lat_dim]
     lon_slice = [(lon - rx) % lon_dim, (lon + rx) % lon_dim]
 
@@ -259,7 +299,7 @@ def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time, lat, lo
 
     for level in range(len(list_level)):
         forecast_values = [
-            valeur(forecast_data, time, level, lat_slice, lon_slice, forecast) for forecast in range(num_forecasts)
+            valeur(forecast_data, time_index, level, lat_slice, lon_slice, forecast) for forecast in range(num_forecasts)
         ]
         forecast_values = np.array(forecast_values)
 
@@ -274,14 +314,12 @@ def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time, lat, lo
         Y_q50.append(q50)
         Y_q75.append(q75)
         Y_q95.append(q95)
-        
-        # Ajout de la sécurité pour ne tracer la courbe Ground Truth que si elle existe
+
         if ground_truth_data is not None:
             try:
-                ground_truth_value = valeur(ground_truth_data, time, level, lat_slice, lon_slice)
+                ground_truth_value = valeur(ground_truth_data, time_index, level, lat_slice, lon_slice)
                 Y_ground_truth.append(ground_truth_value)
             except KeyError:
-                # Si la variable n'existe pas pour ce niveau, ignorer
                 Y_ground_truth.append(None)
 
     X = list_level
@@ -290,34 +328,27 @@ def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time, lat, lo
     Y_q50 = np.array(Y_q50)
     Y_q75 = np.array(Y_q75)
     Y_q95 = np.array(Y_q95)
-    
-    # Filtrer les valeurs None dans Y_ground_truth
     Y_ground_truth = np.array([gt for gt in Y_ground_truth if gt is not None])
 
-    # Traçage des courbes de percentiles avec remplissage
+    # Plot percentiles
     ax.fill_between(X, Y_q05, Y_q25, color='yellow', alpha=0.4, label='Q05 - Q25')
     ax.fill_between(X, Y_q25, Y_q50, color='orange', alpha=0.4, label='Q25 - Q50')
     ax.fill_between(X, Y_q50, Y_q75, color='red', alpha=0.4, label='Q50 - Q75')
     ax.fill_between(X, Y_q75, Y_q95, color='purple', alpha=0.4, label='Q75 - Q95')
 
-    # Traçage des lignes de percentiles pour plus de clarté
     ax.plot(X, Y_q05, color='yellow')
     ax.plot(X, Y_q25, color='orange')
     ax.plot(X, Y_q50, color='red')
     ax.plot(X, Y_q75, color='purple')
     ax.plot(X, Y_q95, color='blue', label='Q95')
-    
-    # Tracer la courbe du Ground Truth sans remplissage
-    if len(Y_ground_truth) > 0:  # Tracer uniquement si la Ground Truth est disponible
+
+    if len(Y_ground_truth) > 0:
         ax.plot(X, Y_ground_truth, label='Ground Truth', color='black', linestyle='-', linewidth=2)
 
     ax.set_xlabel('Pressure Level')
-    ax.set_ylabel('Atmospheric Temperature')
-    ax.set_title('Forecast Statistics')
+    ax.set_ylabel('Variable Value')
     ax.legend()
     ax.grid(True)
-
-
 
 
 def register_callbacks(app):
@@ -333,8 +364,8 @@ def register_callbacks(app):
         ref_files = get_local_files(path_repertory)
         pred_files = get_local_files(path_repertory)
         return ref_files, pred_files
-    
 
+    # Callback pour mettre à jour les variables disponibles pour le fichier 1
     @app.callback(
         [Output('variable-dropdown1', 'options'),
          Output('forecast-number-container1', 'style'),
@@ -358,7 +389,7 @@ def register_callbacks(app):
         except FileNotFoundError as e:
             return [], {'display': 'none'}, None, str(e)
 
-
+    # Callback pour mettre à jour les variables disponibles pour le fichier 2
     @app.callback(
         [Output('variable-dropdown2', 'options'),
          Output('forecast-number-container2', 'style'),
@@ -381,7 +412,6 @@ def register_callbacks(app):
             return variables, forecast_style, forecast_length, time_period_text
         except FileNotFoundError as e:
             return [], {'display': 'none'}, None, str(e)
-    
 
     # Callback pour mettre à jour le dropdown des niveaux pour le graphique 1
     @app.callback(
@@ -420,8 +450,8 @@ def register_callbacks(app):
         options = [{'label': str(level), 'value': level} for level in levels]
 
         return options, None
-    
 
+    # Callback pour générer et mettre à jour les images des graphiques 1 et 2
     @app.callback(
         [Output('stored-images1', 'data'),
          Output('stored-images2', 'data'),
@@ -436,14 +466,14 @@ def register_callbacks(app):
          Input('interval', 'n_intervals')],
         [State('file-dropdown1', 'value'),
          State('variable-dropdown1', 'value'),
-         State('start-year-input', 'value'),
-         State('start-month-input', 'value'),
-         State('start-day-input', 'value'),
-         State('start-hour-input', 'value'),
-         State('end-year-input', 'value'),
-         State('end-month-input', 'value'),
-         State('end-day-input', 'value'),
-         State('end-hour-input', 'value'),
+         State('start-year-dropdown', 'value'),
+         State('start-month-dropdown', 'value'),
+         State('start-day-dropdown', 'value'),
+         State('start-hour-dropdown', 'value'),
+         State('end-year-dropdown', 'value'),
+         State('end-month-dropdown', 'value'),
+         State('end-day-dropdown', 'value'),
+         State('end-hour-dropdown', 'value'),
          State('forecast-number-input1', 'value'),
          State('range-z1-dropdown', 'value'),
          State('file-dropdown2', 'value'),
@@ -461,24 +491,31 @@ def register_callbacks(app):
          State('interval', 'disabled')]
     )
     def generate_and_update_images(n_clicks_generate, n_clicks_prev, n_clicks_next, n_clicks_play, n_intervals,
-                                   file1, variable1, start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour,
-                                   forecast1, z1, file2, variable2, forecast2, z2, x, y, rx, ry, stored_images1, stored_images2, current_src1, current_src2,
-                                   interval_disabled):
+                                   file1, variable1, start_year, start_month, start_day, start_hour,
+                                   end_year, end_month, end_day, end_hour,
+                                   forecast1, z1, file2, variable2, forecast2, z2, x, y, rx, ry,
+                                   stored_images1, stored_images2, current_src1, current_src2, interval_disabled):
         ctx = dash.callback_context
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
         # Si le bouton "Generate" est cliqué, régénérer les images et réinitialiser l'affichage
         if button_id == 'generate-button1':
-            if None in [start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour]:
+            # Vérifier que toutes les valeurs de date sont sélectionnées
+            if None in [start_year, start_month, start_day, start_hour,
+                        end_year, end_month, end_day, end_hour]:
                 raise PreventUpdate
 
-            start_time, end_time = get_start_and_end_time(start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour)
+            # Convertir les valeurs de date en datetime64
+            start_time = concatene_time(start_year, start_month, start_day, start_hour)
+            end_time = concatene_time(end_year, end_month, end_day, end_hour)
+
             if not start_time or not end_time:
                 raise PreventUpdate
 
             images1, images2 = [], []
 
             if file1 and variable1:
+                dataset_name1 = file1
                 try:
                     ds1 = xr.open_zarr(f'{path_repertory}/{file1}')
                 except FileNotFoundError:
@@ -488,9 +525,10 @@ def register_callbacks(app):
                     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, "Specified time period is not in the dataset", interval_disabled
 
                 level_index1 = list(ds1[variable1].level.values).index(z1) if z1 else None
-                images1 = list_images_plot(ds1, variable1, start_time, end_time, level_index1, forecast1, mask, x, y, rx, ry)
+                images1 = list_images_plot(ds1, variable1, start_time, end_time, level_index1, forecast1, mask, x, y, rx, ry, dataset_name1)
 
             if file2 and variable2:
+                dataset_name2 = file2
                 try:
                     ds2 = xr.open_zarr(f'{path_repertory}/{file2}')
                 except FileNotFoundError:
@@ -500,7 +538,7 @@ def register_callbacks(app):
                     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, "Specified time period is not in the dataset", interval_disabled
 
                 level_index2 = list(ds2[variable2].level.values).index(z2) if z2 else None
-                images2 = list_images_plot(ds2, variable2, start_time, end_time, level_index2, forecast2, mask, x, y, rx, ry)
+                images2 = list_images_plot(ds2, variable2, start_time, end_time, level_index2, forecast2, mask, x, y, rx, ry, dataset_name2)
 
             if not images1 and not images2:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, "No images generated", interval_disabled
@@ -545,7 +583,45 @@ def register_callbacks(app):
 
         raise PreventUpdate
 
+    # Callback pour mettre à jour les heures disponibles
+    @app.callback(
+        [Output('start-hour-dropdown', 'options'),
+         Output('end-hour-dropdown', 'options')],
+        Input('file-dropdown1', 'value')
+    )
+    def update_hour_dropdowns(selected_file):
+        if selected_file is None:
+            return [], []
+        try:
+            dataset_path = f'{path_repertory}/{selected_file}'
+            ds = xr.open_zarr(dataset_path)
+            hours = all_the_hours_of_the_first_day(ds)
+            hour_options = [{'label': f"{h:02d}:00", 'value': h} for h in hours]
+            return hour_options, hour_options
+        except Exception as e:
+            print(f"Error updating hour dropdowns: {e}")
+            return [], []
 
+    # Callback pour mettre à jour les années disponibles
+    @app.callback(
+        [Output('start-year-dropdown', 'options'),
+         Output('end-year-dropdown', 'options')],
+        Input('file-dropdown1', 'value')
+    )
+    def update_year_dropdowns(selected_file):
+        if selected_file is None:
+            return [], []
+        try:
+            dataset_path = f'{path_repertory}/{selected_file}'
+            ds = xr.open_zarr(dataset_path)
+            years = all_year_between(ds)
+            year_options = [{'label': str(y), 'value': y} for y in years]
+            return year_options, year_options
+        except Exception as e:
+            print(f"Error updating year dropdowns: {e}")
+            return [], []
+
+    # Callback pour mettre à jour les options de métriques disponibles
     @app.callback(
         Output('metrics-variables-options2', 'options'),
         Input('variable-dropdown2', 'value'),
@@ -569,36 +645,36 @@ def register_callbacks(app):
         except FileNotFoundError:
             return []
 
-
+    # Callback pour gérer les images du graphique 3 (métriques)
     @app.callback(
-        [Output('stored-images3', 'data'),  
-         Output('graph3-plot', 'src')],    
-        [Input('generate-metrics-button', 'n_clicks'), 
-         Input('prev-button2', 'n_clicks'),             
-         Input('next-button2', 'n_clicks')],            
-        [State('file-dropdown2', 'value'), 
+        [Output('stored-images3', 'data'),
+         Output('graph3-plot', 'src')],
+        [Input('generate-metrics-button', 'n_clicks'),
+         Input('prev-button2', 'n_clicks'),
+         Input('next-button2', 'n_clicks')],
+        [State('file-dropdown2', 'value'),
          State('file-dropdown1', 'value'),  # Ground Truth
-         State('variable-dropdown2', 'value'), 
-         State('start-year-input', 'value'),
-         State('start-month-input', 'value'),
-         State('start-day-input', 'value'),
-         State('start-hour-input', 'value'),
-         State('end-year-input', 'value'),
-         State('end-month-input', 'value'),
-         State('end-day-input', 'value'),
-         State('end-hour-input', 'value'),
-         State('range-x', 'value'), 
-         State('range-y', 'value'), 
-         State('range-rx', 'value'), 
+         State('variable-dropdown2', 'value'),
+         State('start-year-dropdown', 'value'),
+         State('start-month-dropdown', 'value'),
+         State('start-day-dropdown', 'value'),
+         State('start-hour-dropdown', 'value'),
+         State('end-year-dropdown', 'value'),
+         State('end-month-dropdown', 'value'),
+         State('end-day-dropdown', 'value'),
+         State('end-hour-dropdown', 'value'),
+         State('range-x', 'value'),
+         State('range-y', 'value'),
+         State('range-rx', 'value'),
          State('range-ry', 'value'),
          State('metrics-variables-options2', 'value'),  # Sélection de la métrique
          State('stored-images3', 'data'),
          State('graph3-plot', 'src')]
     )
-    def manage_graph3_images(n_clicks_generate, n_clicks_prev, n_clicks_next, 
-                             selected_file, selected_ground_truth, variable, 
+    def manage_graph3_images(n_clicks_generate, n_clicks_prev, n_clicks_next,
+                             selected_file, selected_ground_truth, variable,
                              start_year, start_month, start_day, start_hour,
-                             end_year, end_month, end_day, end_hour, 
+                             end_year, end_month, end_day, end_hour,
                              x, y, rx, ry, selected_metric,
                              stored_images, current_src):
         ctx = dash.callback_context
@@ -607,14 +683,12 @@ def register_callbacks(app):
         def safe_get_start_end_time(s_year, s_month, s_day, s_hour, e_year, e_month, e_day, e_hour):
             s_hour = s_hour if s_hour is not None else 0
             e_hour = e_hour if e_hour is not None else 0
-            start_time, end_time = get_start_and_end_time(
-                s_year, s_month, s_day, s_hour,
-                e_year, e_month, e_day, e_hour
-            )
+            start_time = concatene_time(s_year, s_month, s_day, s_hour)
+            end_time = concatene_time(e_year, e_month, e_day, e_hour)
             return start_time, end_time
 
         if triggered_id == 'generate-metrics-button':
-            required_inputs = [selected_file, selected_ground_truth, variable, start_year, start_month, start_day, 
+            required_inputs = [selected_file, selected_ground_truth, variable, start_year, start_month, start_day,
                                end_year, end_month, end_day, x, y, selected_metric]
 
             if not all(required_inputs):
@@ -630,6 +704,7 @@ def register_callbacks(app):
 
             try:
                 ds_forecast = xr.open_zarr(f'{path_repertory}/{selected_file}')
+                dataset_name = selected_file
                 lat_dim = len(ds_forecast.latitude)
                 lon_dim = len(ds_forecast.longitude)
 
@@ -638,8 +713,10 @@ def register_callbacks(app):
                 y = y % lat_dim
 
                 ds_ground_truth = None
+                ground_truth_name = None
                 if variable in xr.open_zarr(f'{path_repertory}/{selected_ground_truth}').variables:
                     ds_ground_truth = xr.open_zarr(f'{path_repertory}/{selected_ground_truth}')
+                    ground_truth_name = selected_ground_truth
             except FileNotFoundError:
                 return dash.no_update, dash.no_update
 
@@ -652,20 +729,26 @@ def register_callbacks(app):
             images = []
             for time_index in time_indexes:
                 buf = BytesIO()
-                plt.figure(figsize=(16, 9))  # 16:9 format
+                plt.figure(figsize=(16, 9))
                 ax = plt.gca()
 
                 plot_forecast_statistics(
-                    ax, 
-                    ds_forecast[variable], 
-                    ds_ground_truth[variable] if ds_ground_truth is not None else None, 
-                    time_index, 
-                    y, 
-                    x, 
-                    rx, 
-                    ry, 
-                    num_forecasts
+                    ax,
+                    ds_forecast[variable],
+                    ds_ground_truth[variable] if ds_ground_truth is not None else None,
+                    time_index,
+                    y,
+                    x,
+                    rx,
+                    ry,
+                    num_forecasts,
+                    dataset_name=dataset_name,
+                    ground_truth_name=ground_truth_name
                 )
+
+                # Obtenir la valeur temporelle
+                time_value = str(ds_forecast.time.values[time_index])
+                ax.set_title(f"Forecast Statistics\nDataset: {dataset_name} | Ground Truth: {ground_truth_name}\nTime: {time_value}")
 
                 plt.savefig(buf, format="png", bbox_inches='tight')
                 buf.seek(0)
