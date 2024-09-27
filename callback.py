@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
+import pandas as pd 
 
 path_repertory = "data"
 
@@ -80,7 +81,7 @@ def concatene_time(year, month, day, hour):
     month = f"{int(month):02d}"
     day = f"{int(day):02d}"
     hour = f"{int(hour):02d}"
-    return np.datetime64(f"{year}-{month}-{day}T{hour}:00:00.000000000")
+    return np.datetime64(f"{year}-{month}-{day}T{hour}:00:00")
 
 
 def get_start_and_end_time(start_year, start_month, start_day, start_hour, end_year, end_month, end_day, end_hour):
@@ -119,7 +120,7 @@ def all_year_between(dataset: xr.Dataset):
 def know_step_hour_for_the_first_day(dataset: xr.Dataset):
     """Détermine le pas horaire pour le premier jour."""
     if len(dataset.time) < 2:
-        return 1  # Par défaut, retourner un pas de 1 heure si le dataset est trop petit
+        return 1 
     return int((dataset.time[1] - dataset.time[0]).values / np.timedelta64(1, 'h'))
 
 
@@ -146,9 +147,35 @@ def get_time_period(file):
     if not os.path.exists(dataset_path):
         raise FileNotFoundError(f"No such file or directory: '{dataset_path}'")
     ds = xr.open_zarr(dataset_path)
-    start_time = str(ds.time.values[0])
-    end_time = str(ds.time.values[-1])
+    start_time = format_time(ds.time.values[0])
+    end_time = format_time(ds.time.values[-1])
     return start_time, end_time
+
+def format_time(np_datetime64):
+    pd_timestamp = pd.to_datetime(np_datetime64)
+    return pd_timestamp.strftime('%Y/%m/%d %H:%M')
+
+def format_title(title_dict):
+    lines = []
+    if 'main_title' in title_dict and title_dict['main_title']:
+        lines.append(title_dict['main_title'])
+    subtitle_parts = []
+    if 'dataset' in title_dict and title_dict['dataset']:
+        subtitle_parts.append(f"Dataset: {title_dict['dataset']}")
+    if 'ground_truth' in title_dict and title_dict['ground_truth']:
+        subtitle_parts.append(f"Ground Truth: {title_dict['ground_truth']}")
+    if 'variable' in title_dict and title_dict['variable']:
+        subtitle_parts.append(f"Variable: {title_dict['variable']}")
+    if 'level' in title_dict and title_dict['level'] is not None:
+        subtitle_parts.append(f"Level: {title_dict['level']}")
+    if 'forecast' in title_dict and title_dict['forecast'] is not None:
+        subtitle_parts.append(f"Forecast: {title_dict['forecast']}")
+    if subtitle_parts:
+        lines.append(" | ".join(subtitle_parts))
+    if 'time' in title_dict and title_dict['time']:
+        lines.append(f"Time: {title_dict['time']}")
+    return "\n".join(lines)
+
 
 def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, ry=None, level=None, forecast=None, mask=None, dataset_name=None):
     plt.figure(figsize=(8, 7))
@@ -156,12 +183,13 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
         lat_dim = len(dataset.latitude)
         lon_dim = len(dataset.longitude)
 
-        # Normalize x and y coordinates
+        # Normalisation des coordonnées x et y
         if x is not None:
             x = x % lon_dim
         if y is not None:
             y = y % lat_dim
 
+        # Sélection des données en fonction des dimensions disponibles
         if level is not None and forecast is not None:
             data = dataset[variable].isel(time=time_index, level=level, forecast=forecast)
         elif level is not None:
@@ -171,7 +199,20 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
         else:
             data = dataset[variable].isel(time=time_index)
 
-        # Case 1: No x and y, display the full image
+        # Formatage du temps
+        time_value = format_time(dataset.time.values[time_index])
+
+        # Construction du titre avec les informations requises
+        title_dict = {
+            'dataset': dataset_name,
+            'variable': variable,
+            'time': time_value
+        }
+        title = format_title(title_dict)
+        plt.title(title)
+
+        # Reste du code pour l'affichage de l'image
+        # Cas 1 : Pas de x et y, affichage de l'image complète
         if x is None and y is None:
             if data.ndim == 2:
                 plt.imshow(np.rot90(data), cmap='jet')
@@ -179,10 +220,10 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
                 data_2d = data.isel(**{dim: 0 for dim in data.dims if dim not in ['latitude', 'longitude', 'lat', 'lon']})
                 plt.imshow(np.rot90(data_2d), cmap='jet')
             else:
-                raise ValueError("Data must be at least 2D for plotting")
+                raise ValueError("Les données doivent être au moins 2D pour être tracées")
             plt.grid(True)
 
-        # Case 2: x and y present, display with scatter
+        # Cas 2 : x et y présents, affichage avec un scatter
         elif x is not None and y is not None and (rx is None or ry is None):
             data_rotated = np.rot90(data)
             plt.imshow(data_rotated, cmap='jet')
@@ -190,7 +231,7 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
             plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')
             plt.grid(True)
 
-        # Case 3: Zoomed in with rx and ry
+        # Cas 3 : Zoom avec rx et ry
         elif x is not None and y is not None and rx is not None and ry is not None:
             data_rotated = np.rot90(data)
             x_min = max(0, x - rx)
@@ -203,6 +244,7 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
             plt.text(x, y + 2, f'({x}, {y})', color='black', fontsize=12, ha='center')
             plt.grid(True)
 
+        # Ajout du masque si disponible
         if mask is not None:
             mask_data = mask["land_sea_mask"].data
             mask_rotated = np.rot90(mask_data)
@@ -213,21 +255,7 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
                 plt.imshow(mask_rotated, cmap='binary', alpha=0.5)
             plt.grid(True)
 
-        # Get the time value
-        time_value = str(dataset.time.values[time_index])
-
-        # Construct the title with more information
-        title_parts = [
-            f"Dataset: {dataset_name}" if dataset_name else "",
-            f"Variable: {variable}",
-            f"Time: {time_value}",
-            f"Level: {level}" if level is not None else "",
-            f"Forecast: {forecast}" if forecast is not None else ""
-        ]
-        title = " | ".join(filter(None, title_parts))
-        plt.title(title)
-
-        # Save the image in memory
+        # Sauvegarde de l'image en mémoire
         buf = BytesIO()
         plt.savefig(buf, format="png")
         buf.seek(0)
@@ -238,7 +266,8 @@ def plot_and_save_image(dataset, variable, time_index, x=None, y=None, rx=None, 
         return f"data:image/png;base64,{image_str}"
 
     except IndexError as e:
-        raise ValueError(f"Indexing error: {e}")
+        raise ValueError(f"Erreur d'indexation : {e}")
+
 
 def list_images_plot(dataset, variable, start_time, end_time, level=None, forecast=None, mask=None, x=None, y=None, rx=None, ry=None, dataset_name=None):
     time_indexes = get_list_indexes_of_time(dataset, start_time, end_time)
@@ -350,7 +379,6 @@ def plot_forecast_statistics(ax, forecast_data, ground_truth_data, time_index, l
     ax.legend()
     ax.grid(True)
 
-
 def register_callbacks(app):
     # Callback pour mettre à jour les fichiers dans les dropdowns
     @app.callback(
@@ -412,6 +440,7 @@ def register_callbacks(app):
             return variables, forecast_style, forecast_length, time_period_text
         except FileNotFoundError as e:
             return [], {'display': 'none'}, None, str(e)
+
 
     # Callback pour mettre à jour le dropdown des niveaux pour le graphique 1
     @app.callback(
@@ -496,7 +525,12 @@ def register_callbacks(app):
                                    forecast1, z1, file2, variable2, forecast2, z2, x, y, rx, ry,
                                    stored_images1, stored_images2, current_src1, current_src2, interval_disabled):
         ctx = dash.callback_context
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+
+        # Initialiser les variables
+        images1 = stored_images1 if stored_images1 else []
+        images2 = stored_images2 if stored_images2 else []
+        time_period_text = dash.no_update
 
         # Si le bouton "Generate" est cliqué, régénérer les images et réinitialiser l'affichage
         if button_id == 'generate-button1':
@@ -543,15 +577,13 @@ def register_callbacks(app):
             if not images1 and not images2:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, "No images generated", interval_disabled
 
-            time_period_text = f"Time Period: {start_time} to {end_time}"
+            time_period_text = f"Time Period: {format_time(start_time)} to {format_time(end_time)}"
 
-            # Désactiver l'intervalle (lecture automatique) lorsqu'on génère de nouvelles images
             interval_disabled = True
 
-            # Retourner les nouvelles images et réinitialiser l'affichage sur la première image
             return images1, images2, images1[0] if images1 else dash.no_update, images2[0] if images2 else dash.no_update, time_period_text, interval_disabled
 
-        # Si un des boutons "Previous", "Next" ou "Play" est cliqué, mettre à jour les images affichées
+
         elif button_id in ['prev-button1', 'next-button1', 'play-button', 'interval']:
             if not stored_images1 and not stored_images2:
                 raise PreventUpdate
@@ -570,7 +602,7 @@ def register_callbacks(app):
                 if stored_images2:
                     current_index2 = (current_index2 + 1) % len(stored_images2)
             elif button_id == 'play-button':
-                interval_disabled = not interval_disabled  # Inverser l'état pour démarrer/arrêter la lecture automatique
+                interval_disabled = not interval_disabled  
 
             return (
                 dash.no_update,
@@ -602,7 +634,6 @@ def register_callbacks(app):
             print(f"Error updating hour dropdowns: {e}")
             return [], []
 
-    # Callback pour mettre à jour les années disponibles
     @app.callback(
         [Output('start-year-dropdown', 'options'),
          Output('end-year-dropdown', 'options')],
@@ -621,7 +652,6 @@ def register_callbacks(app):
             print(f"Error updating year dropdowns: {e}")
             return [], []
 
-    # Callback pour mettre à jour les options de métriques disponibles
     @app.callback(
         Output('metrics-variables-options2', 'options'),
         Input('variable-dropdown2', 'value'),
@@ -637,7 +667,6 @@ def register_callbacks(app):
             data_var = ds[variable]
             metrics = []
 
-            # Vérifiez les conditions pour ajouter l'option "Forecast Statistics"
             if check_conditions_for_plot_forecast_statistics(data_var):
                 metrics.append({'label': 'Forecast Statistics', 'value': 'forecast_statistics'})
 
@@ -645,7 +674,6 @@ def register_callbacks(app):
         except FileNotFoundError:
             return []
 
-    # Callback pour gérer les images du graphique 3 (métriques)
     @app.callback(
         [Output('stored-images3', 'data'),
          Output('graph3-plot', 'src')],
@@ -667,7 +695,7 @@ def register_callbacks(app):
          State('range-y', 'value'),
          State('range-rx', 'value'),
          State('range-ry', 'value'),
-         State('metrics-variables-options2', 'value'),  # Sélection de la métrique
+         State('metrics-variables-options2', 'value'),  
          State('stored-images3', 'data'),
          State('graph3-plot', 'src')]
     )
@@ -746,9 +774,17 @@ def register_callbacks(app):
                     ground_truth_name=ground_truth_name
                 )
 
-                # Obtenir la valeur temporelle
-                time_value = str(ds_forecast.time.values[time_index])
-                ax.set_title(f"Forecast Statistics\nDataset: {dataset_name} | Ground Truth: {ground_truth_name}\nTime: {time_value}")
+                time_value = format_time(ds_forecast.time.values[time_index])
+
+                title_dict = {
+                    'main_title': 'Forecast Statistics',
+                    'dataset': dataset_name,
+                    'ground_truth': ground_truth_name,
+                    'variable': variable,
+                    'time': time_value
+                }
+                title = format_title(title_dict)
+                ax.set_title(title)
 
                 plt.savefig(buf, format="png", bbox_inches='tight')
                 buf.seek(0)
@@ -775,4 +811,4 @@ def register_callbacks(app):
 
             return stored_images, stored_images[current_index]
 
-        raise dash.exceptions.PreventUpdate
+        raise PreventUpdate
